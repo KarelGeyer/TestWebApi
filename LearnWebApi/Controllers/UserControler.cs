@@ -1,8 +1,8 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using LearnWebApi.Models;
-using Microsoft.EntityFrameworkCore;
 using LearnWebApi.Request_Types;
+using LearnWebApi.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 
 namespace LearnWebApi.Controllers
 {
@@ -11,30 +11,30 @@ namespace LearnWebApi.Controllers
     public class UserController : Controller
     {
 
-        public readonly DataContext context;
-        private readonly string missingDataError;
+        public readonly DataContext _context;
+        private readonly IAuth _auth;
 
-        public UserController(DataContext context)
+        public UserController(DataContext context, IAuth auth)
         {
-            this.context = context;
-            this.missingDataError = $"Firstname, Surname, Password and Email are all required fields";
+            _context = context;
+            _auth = auth;
         }
 
         [HttpGet]
         public async Task<ActionResult<List<User>>> GetUsers()
         {
-            List<User> users = await this.context.User
+            List<User> users = await _context.User
                 .ToListAsync();
 
             return Ok(users);
         }
 
-        [HttpGet("{email}")]
+        [HttpGet("{email}"), Authorize(Roles = "Admin")]
         public async Task<ActionResult<User>> GetUser(UserFindDto request)
         {
             try
             {
-                User user = await this.context.User
+                User user = await _context.User
                     .SingleAsync(thisUser => thisUser.Email == request.Email);
 
                 if (request.Password != user.Password)
@@ -51,39 +51,42 @@ namespace LearnWebApi.Controllers
         }
 
         [HttpPost]
-        public async Task<ActionResult<User>> PostUser(User user)
+        public async Task<ActionResult<User>> PostUser(UserAuth user)
         {
             {
                 try
                 {
-                    User userWithThisEmail = await this.context.User
+                    User userWithThisEmail = await _context.User
                         .SingleAsync(thisUser => thisUser.Email == user.Email);
 
                     if (userWithThisEmail != null)
                     {
                         return BadRequest($"User with email {userWithThisEmail.Email} already exists");
                     }
-                } catch (Exception ex)
+                } catch (Exception)
                 {
-                    Console.WriteLine(ex.Message);
+                    Console.WriteLine($"Something went wrong when trying to find if user exists");
                 }
-
-                if (
-                    string.IsNullOrEmpty(user.Email) ||
-                    string.IsNullOrEmpty(user.Name) ||
-                    string.IsNullOrEmpty(user.Surname) ||
-                    string.IsNullOrEmpty(user.Password)
-                    )
-                {
-                    return BadRequest(this.missingDataError);
-                }  
 
                 try
                 {
-                    this.context.User.Add(user);
-                    await this.context.SaveChangesAsync();
+                    _auth.CreatePasswordHash(user.Password, out byte[] passwordHash, out byte[] passwordSalt);
 
-                    return Ok(user);
+                    User newUser = new()
+                    {
+                        Email = user.Email,
+                        Name = user.Name,
+                        Surname = user.Surname,
+                        Password = user.Password,
+                        Role = user.Role,
+                        PasswordHash = passwordHash,
+                        PasswordSalt = passwordSalt
+                    };
+
+                    _context.User.Add(newUser);
+                    await _context.SaveChangesAsync();
+
+                    return Ok(newUser);
 
                 } catch (Exception ex)
                 {
@@ -92,12 +95,36 @@ namespace LearnWebApi.Controllers
             }
         }
 
-        [HttpDelete]
+        [HttpPost("login")]
+        public async Task<ActionResult<string>> Login(UserAuth user)
+        {
+            try
+            {
+                User foundUser = await _context.User
+                    .SingleAsync(thisUser => thisUser.Email == user.Email);
+
+                if (foundUser.PasswordHash != null && foundUser.PasswordSalt != null) 
+                {
+                    if (!_auth.VerifyPasswordHash(user.Password, foundUser.PasswordHash, foundUser.PasswordSalt))
+                    {
+                        return BadRequest("Wrong Password");
+                    }
+                }
+
+                string token = _auth.CreateToken(foundUser);
+                return Ok(token);
+            } catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpDelete, Authorize]
         public async Task<ActionResult<User>> DeleteUser(UserFindDto request)
         {
             try
             {
-                User user = await this.context.User.SingleAsync(thisUser => thisUser.Email == request.Email);
+                User user = await _context.User.SingleAsync(thisUser => thisUser.Email == request.Email);
 
                 if (request.Password != user.Password)
                 {
@@ -106,10 +133,10 @@ namespace LearnWebApi.Controllers
 
                 if (user != null)
                 {
-                    this.context.User.Remove(user);
-                    await this.context.SaveChangesAsync();
+                    _context.User.Remove(user);
+                    await _context.SaveChangesAsync();
 
-                    var transactions = await this.context.Transaction.ToListAsync();
+                    var transactions = await _context.Transaction.ToListAsync();
 
                     if (transactions != null)
                     {
@@ -129,24 +156,59 @@ namespace LearnWebApi.Controllers
             }
         }
 
-        [HttpPut("{id}")]
+        [HttpPut("{id}"), Authorize]
         public async Task<ActionResult<User>> ChangeUser(UserChangeDto request)
         {
             try
             {
-                var user = await this.context.User.FindAsync(request.Id);
+                User? user = await _context.User.FindAsync(request.Id);
+
+                if (user == null)
+                {
+                    return BadRequest("Not found");
+                }
 
                 if (request.Password != user?.Password)
                 {
                     return BadRequest("email or password is wrong");
                 }
 
-                user.Name = request.Name; 
-                user.Email = request.Email; 
+                user.Name = request.Name;
+                user.Email = request.Email;
                 user.Surname = request.Surname;
                 user.Password = request.NewPassword;
 
-                await this.context.SaveChangesAsync();
+                await _context.SaveChangesAsync();
+                return Ok(user);
+
+            }
+            catch (Exception)
+            {
+                return BadRequest("email or password is wrong");
+            }
+        }
+
+        [HttpPut("role/{id}"), Authorize(Roles = "Admin")]
+        public async Task<ActionResult<User>> ChangeUserRole(UserFindDto request, string role)
+        {
+            try
+            {
+                User user = await _context.User
+                    .SingleAsync(thisUser => thisUser.Email == request.Email);
+
+                if (user == null)
+                {
+                    return BadRequest("Not found");
+                }
+
+                if (request.Password != user.Password)
+                {
+                    return BadRequest("email or password is wrong");
+                }
+
+                user.Role = role;
+
+                await _context.SaveChangesAsync();
                 return Ok(user);
 
             }

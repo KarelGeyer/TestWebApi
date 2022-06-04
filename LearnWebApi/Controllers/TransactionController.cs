@@ -3,26 +3,28 @@ using Microsoft.AspNetCore.Mvc;
 using LearnWebApi.Models;
 using LearnWebApi.Types;
 using LearnWebApi.Request_Types;
+using Microsoft.AspNetCore.Authorization;
 
 namespace LearnWebApi.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    // [Authorize] - You have to add AllowAnonymous to routes you want the be excludes - example -> [HttpGet, AllowAnonymous]
     public class TransactionController : Controller
     {
-        private readonly DataContext context;
+        private readonly DataContext _context;
 
         public TransactionController(DataContext context)
         {
-            this.context = context;
+            _context = context;
         }
 
-        [HttpGet]
+        [HttpGet, Authorize(Roles = "Admin")]
         public async Task<ActionResult<List<Transaction>>> GetTransactions()
         {
             try
             {
-                var transactions = await this.context.Transaction
+                List<Transaction> transactions = await _context.Transaction
                     .ToListAsync();
 
                 return Ok(transactions);
@@ -32,15 +34,15 @@ namespace LearnWebApi.Controllers
             }
         }
 
-        [HttpGet("{userId}")]
-        public async Task<ActionResult<List<Transaction>>> GetUserTransactions(int userId) {
+        [HttpGet("{userId}"), Authorize]
+        public async Task<ActionResult<Transaction>> GetUserTransactions(int userId) {
             try
             {
-                var transactions = await this.context.Transaction
+                Transaction transaction = await _context.Transaction
                     .Where(transaction => transaction.UserId == userId)
                     .ToListAsync();
 
-                return Ok(transactions);
+                return Ok(transaction);
             }
             catch (Exception ex)
             {
@@ -48,12 +50,12 @@ namespace LearnWebApi.Controllers
             }
         }
 
-        [HttpPost()]
+        [HttpPost(), Authorize(Roles = "Admin")]
         public async Task<ActionResult<Transaction>> PostTransaction(TransactionPostDto request)
         {
             try
             {
-                var user = await this.context.User
+                User? user = await _context.User
                     .FindAsync(request.UserId);
 
                 if (user == null)
@@ -61,19 +63,19 @@ namespace LearnWebApi.Controllers
                     return BadRequest("User with this {userId} ID does not exist");
                 }
 
-                var thisTransaction = new Transaction
+                Transaction thisTransaction = new()
                 {
                     UserId = request.UserId,
                     Type = request.Type,
                     Recipient = request.Recipient,
                     TransactionId = request.TransactionId,
                     Sum = request.Sum,
-                };        
+                };
 
-                var newTransaction = this.context.Transaction
+                var newTransaction = _context.Transaction
                     .Add(thisTransaction);
 
-                await this.context.SaveChangesAsync();
+                await _context.SaveChangesAsync();
 
                 return Ok($"transaction with ID {thisTransaction.Id} was added");
             } catch (Exception ex)
@@ -82,12 +84,12 @@ namespace LearnWebApi.Controllers
             } 
         }
 
-        [HttpDelete("{id}")]
+        [HttpDelete("{id}"), Authorize]
         public async Task<ActionResult> DeleteTransaction(int id)
         {
             try
             {
-                var transaction = await this.context.Transaction
+                Transaction? transaction = await _context.Transaction
                     .FindAsync(id);
 
                 if (transaction == null)
@@ -95,9 +97,9 @@ namespace LearnWebApi.Controllers
                     return BadRequest($"Transaction with ID {id} was not found");
                 }
 
-                this.context.Transaction
+                _context.Transaction
                     .Remove(transaction);
-                await this.context
+                await _context
                     .SaveChangesAsync();
 
                 return Ok(transaction);
@@ -107,21 +109,21 @@ namespace LearnWebApi.Controllers
             }
         }
 
-        [HttpDelete]
+        [HttpDelete, Authorize(Roles = "Admin")]
         public async Task<ActionResult> DeleteTransactionsByIds(int[] ids)
         {
             try
             {
                 for (int i = 0; i < ids.Length; i++)
                 {
-                    var transaction = await this.context.Transaction
+                    Transaction? transaction = await _context.Transaction
                         .FindAsync(ids[i]);
 
                     if (transaction != null)
                     {
-                        this.context.Transaction
+                        _context.Transaction
                             .Remove(transaction);
-                        await this.context
+                        await _context
                             .SaveChangesAsync();
                     }
                     
@@ -134,18 +136,18 @@ namespace LearnWebApi.Controllers
             }
         }
 
-        [HttpDelete("{userId}")]
+        [HttpDelete("{userId}"), Authorize]
         public async Task<ActionResult> DeleteUsersTransactions(int userId)
         {
             try
             {
-                var transactions = await this.context.Transaction
+                List<Transaction> transactions = await _context.Transaction
                     .Where(transaction => transaction.UserId == userId)
                     .ToListAsync();
 
                 for (int i = 0; i < transactions.Count; i++)
                 {
-                    this.context.Transaction
+                    _context.Transaction
                       .Remove(transactions[i]);
                 }
 

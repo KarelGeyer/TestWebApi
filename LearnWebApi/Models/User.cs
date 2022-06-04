@@ -25,6 +25,12 @@ namespace LearnWebApi.Models
             ErrorMessage = "Password must inlude at least one lowercase and one uppercase character, number and")]
         public string Password { get; set; } = string.Empty;
 
+        // Auth
+        public byte[]? PasswordHash { get; set; }
+        public byte[]? PasswordSalt { get; set; }
+
+        public string Role { get; set; } = "User";
+
         // Navigation Properties
         [JsonIgnore]
         public ICollection<Transaction> Transactions { get; set; }

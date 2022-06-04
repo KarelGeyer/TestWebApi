@@ -23,5 +23,10 @@ namespace LearnWebApi.Models
 
         [Required]
         public int UserId { get; set; }
+
+        public static implicit operator Transaction(List<Transaction> v)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

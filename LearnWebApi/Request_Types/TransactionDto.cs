@@ -1,4 +1,5 @@
-﻿using LearnWebApi.Types;
+﻿
+using LearnWebApi.Types;
 
 namespace LearnWebApi.Request_Types
 {
