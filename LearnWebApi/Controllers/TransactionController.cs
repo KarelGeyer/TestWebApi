@@ -38,7 +38,7 @@ namespace LearnWebApi.Controllers
         public async Task<ActionResult<Transaction>> GetUserTransactions(int userId) {
             try
             {
-                Transaction transaction = await _context.Transaction
+                var transaction = await _context.Transaction
                     .Where(transaction => transaction.UserId == userId)
                     .ToListAsync();
 
@@ -50,26 +50,32 @@ namespace LearnWebApi.Controllers
             }
         }
 
-        [HttpPost(), Authorize(Roles = "Admin")]
-        public async Task<ActionResult<Transaction>> PostTransaction(TransactionPostDto request)
+        [HttpPost, Authorize]
+        public async Task<ActionResult<Transaction>> PostTransaction(
+            TransactionType Type,
+            string TransactionId,
+            string Recipient,
+            int UserId,
+            int Sum
+            )
         {
             try
             {
-                User? user = await _context.User
-                    .FindAsync(request.UserId);
+                var user = await _context.User
+                    .FindAsync(UserId);
 
                 if (user == null)
                 {
                     return BadRequest("User with this {userId} ID does not exist");
                 }
 
-                Transaction thisTransaction = new()
+                var thisTransaction = new Transaction
                 {
-                    UserId = request.UserId,
-                    Type = request.Type,
-                    Recipient = request.Recipient,
-                    TransactionId = request.TransactionId,
-                    Sum = request.Sum,
+                    UserId = UserId,
+                    Type = Type,
+                    Recipient = Recipient,
+                    TransactionId = TransactionId,
+                    Sum = Sum,
                 };
 
                 var newTransaction = _context.Transaction
@@ -77,11 +83,12 @@ namespace LearnWebApi.Controllers
 
                 await _context.SaveChangesAsync();
 
-                return Ok($"transaction with ID {thisTransaction.Id} was added");
-            } catch (Exception ex)
+                return Ok($"transaction with ID was added");
+            }
+            catch (Exception ex)
             {
                 return BadRequest(ex.Message);
-            } 
+            }
         }
 
         [HttpDelete("{id}"), Authorize]

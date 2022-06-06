@@ -7,10 +7,10 @@ using System.Security.Cryptography;
 
 namespace LearnWebApi.Services
 {
-    public class Auth : IAuth
+    public class AuthService : IAuth
     {
         private readonly IConfiguration _configuration;
-        public Auth(IConfiguration configuration)
+        public AuthService(IConfiguration configuration)
         {
             _configuration = configuration;
         }

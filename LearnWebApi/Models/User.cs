@@ -32,7 +32,6 @@ namespace LearnWebApi.Models
         public string Role { get; set; } = "User";
 
         // Navigation Properties
-        [JsonIgnore]
-        public ICollection<Transaction> Transactions { get; set; }
+        public List<Transaction> Transactions { get; set; }
     }
 }
